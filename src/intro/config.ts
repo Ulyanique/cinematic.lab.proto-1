@@ -14,29 +14,24 @@ export interface MediaSlotConfig {
 }
 
 export const BRAND = {
-  name: 'AURUM',
-  tagline: 'Золотой стандарт',
+  name: 'ЯНТАРНЫЙ ЦИРКУЛЬ',
   presents: 'представляет',
 }
 
-export const MEDIA: MediaSlotConfig[] = [
-  { kind: 'video', title: 'Рассвет' },
-  { kind: 'photo', title: 'Энергия' },
-  { kind: 'video', title: 'Люди' },
-  { kind: 'photo', title: 'Мощь' },
-  { kind: 'video', title: 'Движение' },
-  { kind: 'photo', title: 'Город' },
-  { kind: 'video', title: 'Технологии' },
-  { kind: 'photo', title: 'Свет' },
-  { kind: 'video', title: 'Будущее' },
-  { kind: 'photo', title: 'Единство' },
-]
+// Source files are the ten clips from arena.ai/circle/video, in filename order.
+export const MEDIA: MediaSlotConfig[] = Array.from({ length: 10 }, (_, i) => ({
+  kind: 'video',
+  title: `Кадр ${i + 1}`,
+  src: `${import.meta.env?.BASE_URL ?? '/'}videos/${String(i + 1).padStart(2, '0')}.mp4`,
+}))
 
 // ── Таймлайн (секунды) ──
 export const CLIP_T0 = 4.6 // центр первого клипа
-export const CLIP_DT = 2.8 // шаг между клипами
-export const FLASH_T = 35.2 // момент вспышки / взрыва звезды
-export const LOGO_T = FLASH_T + 1.5
+export const CLIP_DT = 3.7 // время на один кадр
+export const clipCenter = (i: number) => CLIP_T0 + i * CLIP_DT
+export const FLASH_T = clipCenter(MEDIA.length - 1) + 4.4
 export const END_T = FLASH_T + 9.5
 
-export const clipCenter = (i: number) => CLIP_T0 + i * CLIP_DT
+// Общее окно видимости для живой сцены и покадрового экспорта.
+export const PANEL_BEFORE = 2.4
+export const PANEL_AFTER = 2.2

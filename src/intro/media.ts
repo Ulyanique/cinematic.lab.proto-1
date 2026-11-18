@@ -4,186 +4,48 @@ import type { MediaSlotConfig } from './config'
 const W = 960
 const H = 540
 
-const PALETTES: [string, string, string][] = [
-  ['#2b3a4a', '#d98c3f', '#f4d9a0'],
-  ['#1f3b34', '#c9a24a', '#f2e3b3'],
-  ['#3a2a22', '#e0803a', '#ffd9a0'],
-  ['#222a3a', '#7aa0c8', '#f1e4c0'],
-  ['#33301f', '#d6b24a', '#fff0b8'],
-  ['#2a2230', '#c47a4f', '#f6d6b0'],
-  ['#18323a', '#58a6a0', '#f0e2b0'],
-  ['#3b2b17', '#f0b34a', '#fff3c9'],
-  ['#202020', '#b89a5a', '#efe3c4'],
-  ['#2e2630', '#d99a52', '#ffe6b6'],
-]
-
+// Сдержанная редакционная карточка вместо имитации видеоплеера.
 function paintPlaceholder(
   ctx: CanvasRenderingContext2D,
   t: number,
   i: number,
-  kind: 'video' | 'photo',
-  title: string,
 ) {
-  const [c0, c1, c2] = PALETTES[i % PALETTES.length]
-  const g = ctx.createLinearGradient(0, 0, W, H)
-  g.addColorStop(0, c0)
-  g.addColorStop(1, '#0b0805')
-  ctx.fillStyle = g
+  const background = ctx.createLinearGradient(0, 0, W, H)
+  background.addColorStop(0, '#25201a')
+  background.addColorStop(0.55, '#12110f')
+  background.addColorStop(1, '#080807')
+  ctx.fillStyle = background
   ctx.fillRect(0, 0, W, H)
 
-  // движущиеся световые пятна
-  ctx.globalCompositeOperation = 'lighter'
-  for (let k = 0; k < 4; k++) {
-    const sp = kind === 'video' ? 0.55 : 0.18
-    const x = W * (0.5 + 0.42 * Math.sin(t * sp + k * 1.9 + i))
-    const y = H * (0.5 + 0.38 * Math.cos(t * sp * 0.8 + k * 2.3 + i * 0.7))
-    const r = 220 + 90 * Math.sin(t * 0.7 + k)
-    const rg = ctx.createRadialGradient(x, y, 0, x, y, r)
-    rg.addColorStop(0, k % 2 ? c1 + '70' : c2 + '30')
-    rg.addColorStop(1, '#00000000')
-    ctx.fillStyle = rg
-    ctx.fillRect(0, 0, W, H)
-  }
-  ctx.globalCompositeOperation = 'source-over'
+  // Мягкий отражённый свет на тёмной поверхности.
+  const x = W * (0.72 + 0.025 * Math.sin(t * 0.12 + i))
+  const glow = ctx.createRadialGradient(x, H * 0.3, 0, x, H * 0.3, W * 0.65)
+  glow.addColorStop(0, 'rgba(168, 132, 79, 0.22)')
+  glow.addColorStop(0.5, 'rgba(94, 71, 43, 0.08)')
+  glow.addColorStop(1, 'rgba(10, 9, 8, 0)')
+  ctx.fillStyle = glow
+  ctx.fillRect(0, 0, W, H)
 
-  // силуэт горизонта (параллакс)
-  for (let layer = 0; layer < 3; layer++) {
-    ctx.beginPath()
-    ctx.moveTo(0, H)
-    const off = t * (8 + layer * 14) * (kind === 'video' ? 1 : 0.2)
-    for (let x = 0; x <= W; x += 24) {
-      const y =
-        H * (0.72 + layer * 0.07) -
-        (40 - layer * 9) * Math.abs(Math.sin((x + off) * 0.006 + i * 3 + layer * 2)) -
-        14 * Math.sin((x + off) * 0.021 + layer)
-      ctx.lineTo(x, y)
-    }
-    ctx.lineTo(W, H)
-    ctx.closePath()
-    ctx.fillStyle = `rgba(8,6,4,${0.35 + layer * 0.22})`
-    ctx.fill()
-  }
-
-  // сетка
-  ctx.strokeStyle = 'rgba(255,230,170,0.07)'
+  ctx.strokeStyle = 'rgba(216, 191, 147, 0.22)'
   ctx.lineWidth = 1
-  for (let x = 0; x <= W; x += 80) {
-    ctx.beginPath()
-    ctx.moveTo(x, 0)
-    ctx.lineTo(x, H)
-    ctx.stroke()
-  }
-  for (let y = 0; y <= H; y += 80) {
-    ctx.beginPath()
-    ctx.moveTo(0, y)
-    ctx.lineTo(W, y)
-    ctx.stroke()
-  }
+  ctx.strokeRect(26, 26, W - 52, H - 52)
+  ctx.beginPath()
+  ctx.moveTo(62, H - 103)
+  ctx.lineTo(W - 62, H - 103)
+  ctx.stroke()
 
-  // диагональ-блик
+  // Тонкие концентрические дуги добавляют глубину, не перекрывая контент.
   ctx.save()
-  ctx.translate(W / 2, H / 2)
-  ctx.rotate(-0.5)
-  const sx = ((t * 160 + i * 140) % (W * 2)) - W
-  const sg = ctx.createLinearGradient(sx - 120, 0, sx + 120, 0)
-  sg.addColorStop(0, '#fff0')
-  sg.addColorStop(0.5, '#ffeec433')
-  sg.addColorStop(1, '#fff0')
-  ctx.fillStyle = sg
-  ctx.fillRect(-W, -H, W * 2, H * 2)
+  ctx.translate(W * 0.76, H * 0.47)
+  ctx.strokeStyle = 'rgba(213, 187, 142, 0.10)'
+  for (let r = 128; r <= 300; r += 43) {
+    ctx.beginPath()
+    ctx.arc(0, 0, r, -1.15, 2.2)
+    ctx.stroke()
+  }
   ctx.restore()
 
-  // огромный номер
-  ctx.font = '800 330px "Cormorant Garamond", Georgia, serif'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.lineWidth = 2
-  ctx.strokeStyle = 'rgba(255,235,190,0.28)'
-  ctx.strokeText(String(i + 1).padStart(2, '0'), W / 2, H / 2 + 10)
 
-  // иконка по центру
-  const cx = W / 2
-  const cy = H / 2
-  ctx.fillStyle = 'rgba(0,0,0,0.38)'
-  ctx.beginPath()
-  ctx.arc(cx, cy, 58, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.strokeStyle = 'rgba(255,240,200,0.9)'
-  ctx.lineWidth = 2.5
-  ctx.stroke()
-  ctx.fillStyle = 'rgba(255,244,214,0.95)'
-  if (kind === 'video') {
-    ctx.beginPath()
-    ctx.moveTo(cx - 14, cy - 24)
-    ctx.lineTo(cx + 28, cy)
-    ctx.lineTo(cx - 14, cy + 24)
-    ctx.closePath()
-    ctx.fill()
-  } else {
-    ctx.beginPath()
-    ctx.moveTo(cx - 30, cy + 20)
-    ctx.lineTo(cx - 8, cy - 8)
-    ctx.lineTo(cx + 6, cy + 10)
-    ctx.lineTo(cx + 16, cy - 2)
-    ctx.lineTo(cx + 32, cy + 20)
-    ctx.closePath()
-    ctx.fill()
-    ctx.beginPath()
-    ctx.arc(cx + 14, cy - 18, 6, 0, Math.PI * 2)
-    ctx.fill()
-  }
-
-  // уголки видоискателя
-  ctx.strokeStyle = 'rgba(255,240,200,0.8)'
-  ctx.lineWidth = 3
-  const m = 34
-  const L = 46
-  const corners: [number, number, number, number][] = [
-    [m, m, 1, 1],
-    [W - m, m, -1, 1],
-    [m, H - m, 1, -1],
-    [W - m, H - m, -1, -1],
-  ]
-  for (const [x, y, dx, dy] of corners) {
-    ctx.beginPath()
-    ctx.moveTo(x + dx * L, y)
-    ctx.lineTo(x, y)
-    ctx.lineTo(x, y + dy * L)
-    ctx.stroke()
-  }
-
-  // подписи
-  ctx.font = '600 22px "Manrope", Arial, sans-serif'
-  ctx.textAlign = 'left'
-  ctx.fillStyle = 'rgba(255,240,205,0.92)'
-  ctx.fillText(kind === 'video' ? 'VIDEO · PLACEHOLDER' : 'PHOTO · PLACEHOLDER', m + 6, H - m - 20)
-  ctx.textAlign = 'right'
-  ctx.fillText(title.toUpperCase(), W - m - 6, H - m - 20)
-  ctx.textAlign = 'left'
-  if (kind === 'video') {
-    const sec = t % 60
-    const tc = `00:${String(Math.floor(sec)).padStart(2, '0')}:${String(Math.floor((sec % 1) * 25)).padStart(2, '0')}`
-    ctx.fillText(tc, m + 34, m + 30)
-    ctx.fillStyle = Math.floor(t * 2) % 2 ? '#ff4d3a' : '#7a1f17'
-    ctx.beginPath()
-    ctx.arc(m + 14, m + 22, 7, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.fillStyle = 'rgba(255,240,200,0.25)'
-    ctx.fillRect(m + 6, H - m - 6, W - m * 2 - 12, 3)
-    ctx.fillStyle = '#ffd98a'
-    ctx.fillRect(m + 6, H - m - 6, (W - m * 2 - 12) * ((t * 0.12) % 1), 3)
-  } else {
-    ctx.fillText('RAW · 6000 × 3375', m + 6, m + 30)
-  }
-
-  // строчная развёртка + шум
-  ctx.fillStyle = 'rgba(0,0,0,0.12)'
-  for (let y = 0; y < H; y += 4) ctx.fillRect(0, y, W, 1)
-  if (kind === 'video') {
-    ctx.fillStyle = 'rgba(255,255,255,0.05)'
-    const ny = (t * 220) % H
-    ctx.fillRect(0, ny, W, 26)
-  }
 }
 
 export class MediaSlot {
@@ -198,9 +60,16 @@ export class MediaSlot {
   crop = new THREE.Vector4(1, 1, 0, 0)
   private panelAspect = 16 / 9
   private lastPaint = -1
+  private objectUrl?: string
+  private generation = 0
+  private disposed = false
+  private playPending = false
+  private playbackBlocked = false
+  kind: 'video' | 'photo'
 
   constructor(cfg: MediaSlotConfig, index: number, panelAspect: number) {
     this.cfg = cfg
+    this.kind = cfg.kind
     this.index = index
     this.panelAspect = panelAspect
     this.canvas = document.createElement('canvas')
@@ -211,9 +80,8 @@ export class MediaSlot {
     tex.colorSpace = THREE.SRGBColorSpace
     tex.anisotropy = 4
     this.texture = tex
-    paintPlaceholder(this.ctx, 0, index, cfg.kind, cfg.title)
+    paintPlaceholder(this.ctx, 0, index)
     tex.needsUpdate = true
-    if (cfg.src) this.load(cfg.src, cfg.kind)
   }
 
   private cover(aspect: number) {
@@ -227,51 +95,128 @@ export class MediaSlot {
     }
   }
 
-  load(src: string, kind: 'video' | 'photo') {
-    this.userMedia = true
-    const old = this.texture
-    if (kind === 'video') {
-      const v = document.createElement('video')
-      v.src = src
-      v.muted = true
-      v.loop = true
-      v.playsInline = true
-      v.crossOrigin = 'anonymous'
-      v.addEventListener('loadedmetadata', () => this.cover(v.videoWidth / v.videoHeight))
-      const vt = new THREE.VideoTexture(v)
-      vt.colorSpace = THREE.SRGBColorSpace
-      this.video = v
-      this.texture = vt
-    } else {
-      const img = new THREE.TextureLoader().load(src, (t) => {
-        const im = t.image as HTMLImageElement
-        this.cover(im.width / im.height)
-      })
-      img.colorSpace = THREE.SRGBColorSpace
-      img.anisotropy = 8
-      this.texture = img
+  async load(src: string, kind: 'video' | 'photo', objectUrl = false): Promise<boolean> {
+    const generation = ++this.generation
+    let video: HTMLVideoElement | undefined
+    let texture: THREE.Texture | undefined
+    try {
+      if (kind === 'video') {
+        video = document.createElement('video')
+        video.muted = true
+        video.loop = true
+        video.playsInline = true
+        video.crossOrigin = 'anonymous'
+        const v = video
+        await new Promise<void>((resolve, reject) => {
+          const timer = window.setTimeout(() => reject(new Error('Video load timed out')), 30000)
+          v.onloadedmetadata = () => { window.clearTimeout(timer); resolve() }
+          v.onerror = () => { window.clearTimeout(timer); reject(new Error('Video load failed')) }
+          v.src = src
+          v.load()
+        })
+        if (this.disposed || generation !== this.generation) throw new Error('Cancelled')
+        this.cover(v.videoWidth / v.videoHeight)
+        texture = new THREE.VideoTexture(v)
+      } else {
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve()
+          img.onerror = () => reject(new Error('Image load failed'))
+          img.src = src
+        })
+        if (this.disposed || generation !== this.generation) throw new Error('Cancelled')
+        this.cover(img.width / img.height)
+        texture = new THREE.Texture(img)
+        texture.needsUpdate = true
+        texture.anisotropy = 8
+      }
+      texture.colorSpace = THREE.SRGBColorSpace
+      this.releaseMedia()
+      this.video = video
+      this.texture = texture
+      this.objectUrl = objectUrl ? src : undefined
+      this.kind = kind
+      this.userMedia = true
+      this.onTexture?.(texture)
+      return true
+    } catch {
+      if (video) { video.pause(); video.removeAttribute('src'); video.load() }
+      texture?.dispose()
+      if (objectUrl) URL.revokeObjectURL(src)
+      return false
     }
-    this.onTexture?.(this.texture)
-    old.dispose()
+  }
+
+  private releaseMedia() {
+    if (this.video) {
+      this.video.pause()
+      this.video.removeAttribute('src')
+      this.video.load()
+      this.video = undefined
+    }
+    this.texture.dispose()
+    if (this.objectUrl) URL.revokeObjectURL(this.objectUrl)
+    this.objectUrl = undefined
+    this.playPending = false
+    this.playbackBlocked = false
+  }
+
+  clear() {
+    ++this.generation
+    this.releaseMedia()
+    this.kind = this.cfg.kind
+    this.userMedia = false
+    this.crop.set(1, 1, 0, 0)
+    this.lastPaint = -1
+    paintPlaceholder(this.ctx, 0, this.index)
+    const texture = new THREE.CanvasTexture(this.canvas)
+    texture.colorSpace = THREE.SRGBColorSpace
+    texture.anisotropy = 4
+    this.texture = texture
+    this.onTexture?.(texture)
+  }
+
+  dispose() {
+    this.disposed = true
+    ++this.generation
+    this.releaseMedia()
+    this.onTexture = undefined
   }
 
   onTexture?: (t: THREE.Texture) => void
 
-  setActive(on: boolean) {
+  setActive(on: boolean, target = 0, onError?: () => void) {
     const v = this.video
     if (!v) return
-    if (on && v.paused) v.play().catch(() => {})
-    if (!on && !v.paused) v.pause()
+    if (!on) {
+      if (!v.paused) v.pause()
+      return
+    }
+    if (Number.isFinite(v.duration) && v.duration > 0 && !v.seeking) {
+      const difference = Math.abs(v.currentTime - target)
+      const loopDifference = Math.min(difference, Math.abs(v.duration - difference))
+      if (loopDifference > 0.45) v.currentTime = target
+    }
+    if (v.paused && !this.playPending && !this.playbackBlocked) {
+      this.playPending = true
+      v.play().catch((error: unknown) => {
+        if (this.video === v && error instanceof DOMException && error.name !== 'AbortError') {
+          this.playbackBlocked = true
+          onError?.()
+        }
+      }).finally(() => { if (this.video === v) this.playPending = false })
+    }
   }
 
   update(time: number, active: boolean) {
     if (this.userMedia) return
     if (!active) return
-    // ~30 fps для плейсхолдеров
-    const q = Math.floor(time * 30)
+    // Обновляем плейсхолдеры с той же частотой, что и экспорт.
+    const q = Math.floor(time * 60 + 1e-6)
     if (q === this.lastPaint) return
     this.lastPaint = q
-    paintPlaceholder(this.ctx, time + this.index * 3.7, this.index, this.cfg.kind, this.cfg.title)
+    paintPlaceholder(this.ctx, time + this.index * 3.7, this.index)
     this.texture.needsUpdate = true
   }
 }

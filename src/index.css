@@ -36,3 +36,76 @@ body,
 .sheen span {
   color: transparent;
 }
+
+/* A quieter, editorial art direction for the opening frame. */
+.intro-cover {
+  background: radial-gradient(ellipse at 50% 42%, rgba(39, 32, 23, .83), rgba(8, 8, 7, .97) 72%), rgba(8, 8, 7, .9);
+}
+.cover-frame { border: 1px solid rgba(211, 188, 143, .19); }
+.cover-frame::before, .cover-frame::after {
+  position: absolute; content: ''; width: 30px; height: 30px;
+  border-color: rgba(225, 199, 154, .52); border-style: solid;
+}
+.cover-frame::before { left: -1px; top: -1px; border-width: 1px 0 0 1px; }
+.cover-frame::after { right: -1px; bottom: -1px; border-width: 0 1px 1px 0; }
+.cover-top, .cover-bottom, .cover-eyebrow {
+  font-size: 9px; letter-spacing: .27em; color: #d8c5a3; font-weight: 500;
+}
+.cover-top-muted, .cover-bottom { color: rgba(216, 197, 163, .43); }
+.cover-eyebrow { color: rgba(218, 198, 164, .7); font-size: 9px; letter-spacing: .33em; }
+.cover-eyebrow span { padding: 0 .7em; color: #c5a675; }
+.cover-heading {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-weight: 400; font-size: clamp(44px, 6.4vw, 90px); line-height: .99;
+  letter-spacing: -.035em; color: #f0e8da;
+}
+.cover-heading em { font-weight: 400; color: #cbb28d; }
+.cover-divider { width: 130px; height: 1px; background: linear-gradient(90deg, transparent, #9e896a, transparent); position: relative; }
+.cover-divider span { position: absolute; width: 5px; height: 5px; left: 50%; top: -2px; background: #d0b487; transform: rotate(45deg); }
+.cover-description { font-size: 13px; line-height: 1.9; color: rgba(231, 220, 203, .57); font-weight: 400; }
+.cover-button {
+  min-width: 252px; min-height: 58px; display: flex; justify-content: space-between; align-items: center;
+  gap: 25px; padding: 0 20px; border: 1px solid rgba(211, 187, 149, .65);
+  color: #f5e9d6; font-size: 10px; letter-spacing: .18em; text-transform: uppercase;
+  background: rgba(212, 189, 150, .045); transition: background .25s, border-color .25s;
+}
+.cover-button:hover, .cover-button:focus-visible { background: rgba(212, 189, 150, .15); border-color: #e9d8b9; }
+.cover-play { font-size: 9px; color: #d3b98e; }
+.cover-arrow { font-size: 16px; color: #b6a17f; }
+.cover-upload { font-size: 10px; letter-spacing: .13em; text-transform: uppercase; color: #d6c3a2; border-bottom: 1px solid rgba(214, 195, 162, .45); padding-bottom: 5px; }
+.cover-upload:hover { color: white; border-color: white; }
+.cover-hint { font-size: 11px; color: rgba(220, 204, 181, .37); }
+@media (max-height: 680px) {
+  .cover-top, .cover-bottom { display: none; }
+  .intro-cover { justify-content: flex-start; }
+}
+.cover-export { color: #e4cfad; font-size: 10px; letter-spacing: .13em; text-transform: uppercase; }
+.cover-export:hover { color: white; }
+.cover-export span { color: rgba(220, 204, 181, .42); margin-left: .5em; font-size: 9px; }
+.cover-export:disabled { opacity: .4; }
+
+.timeline-controls {
+  border: 1px solid rgba(211, 188, 149, .23);
+  background: rgba(10, 9, 8, .78);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .3);
+}
+.timeline-play, .timeline-restart { color: #ead8b8; font-size: 15px; min-width: 22px; }
+.timeline-play:hover, .timeline-restart:hover { color: white; }
+.timeline-time { color: rgba(234, 216, 184, .65); font-size: 10px; font-variant-numeric: tabular-nums; letter-spacing: .08em; }
+.timeline-range { --progress: 0%; display: block; width: 100%; height: 18px; appearance: none; background: transparent; cursor: pointer; }
+.timeline-range::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(to right, #e5c58b var(--progress), rgba(229, 197, 139, .22) var(--progress)); }
+.timeline-range::-moz-range-track { height: 2px; background: rgba(229, 197, 139, .22); }
+.timeline-range::-moz-range-progress { height: 2px; background: #e5c58b; }
+.timeline-range::-webkit-slider-thumb { appearance: none; width: 10px; height: 10px; margin-top: -4px; background: #f2dfba; border-radius: 50%; }
+.timeline-range::-moz-range-thumb { width: 10px; height: 10px; background: #f2dfba; border: 0; border-radius: 50%; }
+.timeline-range:focus-visible, .timeline-play:focus-visible, .timeline-restart:focus-visible, .timeline-markers button:focus-visible { outline: 2px solid #f2dfba; outline-offset: 4px; }
+.timeline-markers { position: relative; height: 9px; margin: 0 5px; }
+.timeline-markers button { position: absolute; top: -1px; transform: translateX(-50%); padding: 3px 5px; }
+.timeline-markers span { display: block; width: 2px; height: 5px; background: rgba(229, 197, 139, .45); }
+.timeline-markers button:hover span { background: #f2dfba; }
+
+/* Clear, quiet contrast behind the final brand lockup. */
+.brand-backdrop {
+  background: radial-gradient(ellipse 49% 42% at 50% 49%, rgba(5, 4, 3, .78), rgba(5, 4, 3, .45) 52%, transparent 100%);
+}

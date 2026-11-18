@@ -36,7 +36,7 @@ export class Finale {
     this.group.add(this.backdrop)
 
     // ── лучи-стрики ──
-    const N = 2200
+    const N = 1400
     const quad = new THREE.InstancedBufferGeometry()
     quad.setAttribute('position', new THREE.BufferAttribute(new Float32Array(12), 3))
     quad.setAttribute('corner', new THREE.BufferAttribute(new Float32Array([0, -1, 0, 1, 1, -1, 1, 1]), 2))
@@ -108,7 +108,7 @@ export class Finale {
     this.group.add(streaks)
 
     // ── золотая пыль (боке) ──
-    const M = 900
+    const M = 380
     const dg = new THREE.BufferGeometry()
     const dpos = new Float32Array(M * 3)
     const dpar = new Float32Array(M * 3)
@@ -137,7 +137,7 @@ export class Finale {
           float sz = aParams.y*uPx*(420.0/max(-mv.z,0.5));
           gl_PointSize = clamp(sz, 0.0, 90.0);
           vS = aParams.z;
-          vA = exp(-uTime*0.18)*(0.45+0.55*sin(uTime*(2.0+aParams.z*5.0)+aParams.z*40.0)*0.5+0.25)*smoothstep(0.0,0.1,uTime)*step(0.0,-mv.z);
+          vA = exp(-uTime*0.42)*(0.45+0.55*sin(uTime*(2.0+aParams.z*5.0)+aParams.z*40.0)*0.5+0.25)*smoothstep(0.0,0.1,uTime)*step(0.0,-mv.z);
         }`,
       fragmentShader: /* glsl */ `
         varying float vA; varying float vS;
@@ -218,6 +218,10 @@ export class Finale {
     this.group.add(this.light)
   }
 
+  setPixelRatio(pixelRatio: number) {
+    this.streakMat.uniforms.uPx.value = pixelRatio
+  }
+
   setRes(w: number, h: number) {
     this.streakMat.uniforms.uRes.value.set(w, h)
   }
@@ -231,24 +235,24 @@ export class Finale {
     const burst = Math.exp(-t * 1.1)
     const s1 = 9 + 70 * Math.exp(-t * 2.6)
     this.star.scale.set(s1 * 2.0, s1 * 2.0, 1)
-    ;(this.star.material as THREE.SpriteMaterial).opacity = 0.25 + 0.75 * burst
+    ;(this.star.material as THREE.SpriteMaterial).opacity = 0.015 + 0.75 * burst
     ;(this.star.material as THREE.SpriteMaterial).rotation = t * 0.05
     const s2 = 14 + 30 * Math.exp(-t * 1.6)
     this.halo2.scale.set(s2 * 2, s2 * 2, 1)
-    ;(this.halo2.material as THREE.SpriteMaterial).opacity = 0.2 + 0.4 * burst
+    ;(this.halo2.material as THREE.SpriteMaterial).opacity = 0.02 + 0.4 * burst
     this.halo2.material.rotation = 0.6 - t * 0.04
     const h = 30 + 110 * Math.exp(-t * 1.1)
     this.halo.scale.set(h, h, 1)
-    ;(this.halo.material as THREE.SpriteMaterial).opacity = 0.35 + 0.65 * burst
+    ;(this.halo.material as THREE.SpriteMaterial).opacity = 0.05 + 0.65 * burst
 
     this.light.intensity = 9000 * Math.exp(-t * 1.4) + 120
-    ;(this.backdrop.material as THREE.MeshBasicMaterial).color.setScalar(0.75 + 0.5 * burst + 0.04 * Math.sin(now * 1.3))
+    ;(this.backdrop.material as THREE.MeshBasicMaterial).color.setScalar(0.5 + 0.38 * burst + 0.025 * Math.sin(now * 0.7))
 
     for (const d of this.debris) {
       const r = (d.speed * (1 - Math.exp(-t * 0.9))) / 0.9 + 1.5
       d.m.position.copy(d.dir).multiplyScalar(r)
       d.m.rotation.set(d.axis.x * t * d.spin, d.axis.y * t * d.spin, d.axis.z * t * d.spin)
-      const sc = Math.min(1, t * 3)
+      const sc = Math.min(1, t * 3) * (1 - THREE.MathUtils.smoothstep(t, 2, 4.8))
       d.m.scale.setScalar(sc)
     }
   }
