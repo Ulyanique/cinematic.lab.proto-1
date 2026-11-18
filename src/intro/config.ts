@@ -14,8 +14,7 @@ export interface MediaSlotConfig {
 }
 
 export const BRAND = {
-  name: 'AURUM',
-  tagline: 'Золотой стандарт',
+  name: 'ЯНТАРНЫЙ ЦИРКУЛЬ',
   presents: 'представляет',
 }
 
@@ -34,9 +33,11 @@ export const MEDIA: MediaSlotConfig[] = [
 
 // ── Таймлайн (секунды) ──
 export const CLIP_T0 = 4.6 // центр первого клипа
-export const CLIP_DT = 2.8 // шаг между клипами
-export const FLASH_T = 35.2 // момент вспышки / взрыва звезды
-export const LOGO_T = FLASH_T + 1.5
+export const CLIP_DT = 3.7 // время на один кадр
+export const clipCenter = (i: number) => CLIP_T0 + i * CLIP_DT
+export const FLASH_T = clipCenter(MEDIA.length - 1) + 4.4
 export const END_T = FLASH_T + 9.5
 
-export const clipCenter = (i: number) => CLIP_T0 + i * CLIP_DT
+// Общее окно видимости для живой сцены и покадрового экспорта.
+export const PANEL_BEFORE = 2.4
+export const PANEL_AFTER = 2.2

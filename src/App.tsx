@@ -1,72 +1,52 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { GoldIntro } from './intro/engine'
-import { IntroAudio } from './intro/audio'
-import { BRAND, END_T, FLASH_T, LOGO_T, MEDIA, clipCenter } from './intro/config'
+import { exportIntro } from './intro/export'
+import { brandReveal } from './intro/timeline'
+import logoUrl from './assets/logo.svg?inline'
+import { BRAND, END_T, FLASH_T, MEDIA, clipCenter } from './intro/config'
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x))
 const smooth = (a: number, b: number, x: number) => {
   const t = clamp01((x - a) / (b - a))
   return t * t * (3 - 2 * t)
 }
-const easeOut = (x: number) => 1 - Math.pow(1 - clamp01(x), 3)
 
-type Status = 'idle' | 'playing' | 'ended'
+type Status = 'idle' | 'playing' | 'paused' | 'ended'
 
-function StarMark({ progress }: { progress: number }) {
-  // 8-лучевая звезда, рисуется по контуру
-  const pts: string[] = []
-  for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2 - Math.PI / 2
-    const r = i % 2 === 0 ? 46 : 11
-    pts.push(`${50 + Math.cos(a) * r},${50 + Math.sin(a) * r}`)
-  }
-  const d = 'M' + pts.join('L') + 'Z'
-  const dash = 420
-  const draw = easeOut(progress / 0.7)
-  const fill = smooth(0.55, 1, progress)
-  return (
-    <svg viewBox="0 0 100 100" className="h-full w-full overflow-visible">
-      <defs>
-        <linearGradient id="gstar" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#fff4cf" />
-          <stop offset="0.5" stopColor="#e9b95a" />
-          <stop offset="1" stopColor="#9a6a22" />
-        </linearGradient>
-      </defs>
-      <circle cx="50" cy="50" r="48" fill="none" stroke="url(#gstar)" strokeWidth="0.6" strokeDasharray="302" strokeDashoffset={302 * (1 - draw)} opacity="0.8" />
-      <path d={d} fill="url(#gstar)" fillOpacity={fill} stroke="url(#gstar)" strokeWidth="1" strokeDasharray={dash} strokeDashoffset={dash * (1 - draw)} strokeLinejoin="round" />
-      <circle cx="50" cy="50" r="3.2" fill="#fff" opacity={fill} />
-    </svg>
-  )
-}
+const formatTime = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`
+
 
 export default function App() {
   const stageRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<GoldIntro | null>(null)
-  const audioRef = useRef<IntroAudio>(new IntroAudio())
   const fileRef = useRef<HTMLInputElement>(null)
 
   const titleRef = useRef<HTMLDivElement>(null)
   const capRef = useRef<HTMLDivElement>(null)
   const barRef = useRef<HTMLDivElement>(null)
   const logoWrap = useRef<HTMLDivElement>(null)
-  const letters = useRef<(HTMLSpanElement | null)[]>([])
   const markRef = useRef<HTMLDivElement>(null)
+  const logoBackdropRef = useRef<HTMLDivElement>(null)
   const tagRef = useRef<HTMLDivElement>(null)
-  const rulesRef = useRef<HTMLDivElement>(null)
-  const sheenRef = useRef<HTMLDivElement>(null)
-  const tickRefs = useRef<(HTMLDivElement | null)[]>([])
   const hudRef = useRef<HTMLDivElement>(null)
+  const timelineRef = useRef<HTMLInputElement>(null)
+  const timelineTimeRef = useRef<HTMLSpanElement>(null)
 
   const [status, setStatus] = useState<Status>('idle')
   const [clip, setClip] = useState(-1)
-  const [markP, setMarkP] = useState(0)
-  const [muted, setMuted] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [toast, setToast] = useState('')
   const [userCount, setUserCount] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [exportProgress, setExportProgress] = useState('')
+  const [videoUrl, setVideoUrl] = useState('')
+  const [videoError, setVideoError] = useState(false)
+  const videoUrlRef = useRef('')
+  const exportRef = useRef<AbortController | null>(null)
+  const loadingRef = useRef(false)
+  const toastTimer = useRef<number | undefined>(undefined)
   const clipRef = useRef(-1)
-  const markPRef = useRef(0)
 
   const onFrame = useCallback((t: number) => {
     // вступительная надпись
@@ -82,9 +62,9 @@ export default function App() {
     let cw = 0
     for (let i = 0; i < MEDIA.length; i++) {
       const tc = clipCenter(i)
-      if (t > tc - 2.0 && t < tc + 1.2) {
+      if (t > tc - 1.85 && t < tc + 1.85) {
         idx = i
-        cw = smooth(tc - 2.0, tc - 1.3, t) * (1 - smooth(tc + 0.5, tc + 1.2, t))
+        cw = smooth(tc - 1.85, tc - 1.25, t) * (1 - smooth(tc + 1.2, tc + 1.85, t))
       }
     }
     if (idx !== clipRef.current) {
@@ -98,94 +78,134 @@ export default function App() {
 
     // прогресс
     if (barRef.current) barRef.current.style.transform = `scaleX(${clamp01(t / END_T)})`
-    tickRefs.current.forEach((el, i) => {
-      if (!el) return
-      const tc = clipCenter(i)
-      const on = smooth(tc - 1.5, tc - 0.8, t)
-      el.style.opacity = String(0.22 + 0.78 * on)
-      el.style.transform = `scaleY(${1 + (idx === i ? 1.2 : 0)})`
-    })
+    if (timelineRef.current) {
+      timelineRef.current.value = String(t)
+      timelineRef.current.style.setProperty('--progress', `${clamp01(t / END_T) * 100}%`)
+      timelineRef.current.setAttribute('aria-valuetext', `${formatTime(t)} из ${formatTime(END_T)}`)
+    }
+    if (timelineTimeRef.current) timelineTimeRef.current.textContent = formatTime(t)
     if (hudRef.current) hudRef.current.style.opacity = String(smooth(1, 2, t) * (1 - smooth(FLASH_T - 0.8, FLASH_T - 0.2, t)))
 
-    // логотип
-    const lp = clamp01((t - LOGO_T) / 3)
-    if (logoWrap.current) {
-      logoWrap.current.style.opacity = lp > 0 ? '1' : '0'
-      const n = letters.current.length
-      letters.current.forEach((el, i) => {
-        if (!el) return
-        const k = easeOut((lp - i * 0.07) / 0.55)
-        el.style.opacity = String(k)
-        el.style.transform = `translateY(${(1 - k) * 26}px) scale(${1 + (1 - k) * 0.25})`
-        el.style.filter = `blur(${(1 - k) * 14}px)`
-        el.style.letterSpacing = '0'
-        void n
-      })
-      if (markRef.current) {
-        markRef.current.style.opacity = String(smooth(0, 0.3, lp))
-        markRef.current.style.transform = `scale(${0.7 + 0.3 * easeOut(lp / 0.8)}) rotate(${(1 - easeOut(lp / 0.9)) * -40}deg)`
-      }
-      if (tagRef.current) {
-        const k = easeOut((lp - 0.45) / 0.55)
-        tagRef.current.style.opacity = String(k)
-        tagRef.current.style.letterSpacing = `${0.9 - 0.45 * k}em`
-        tagRef.current.style.filter = `blur(${(1 - k) * 8}px)`
-      }
-      if (rulesRef.current) {
-        const k = easeOut((lp - 0.35) / 0.6)
-        rulesRef.current.style.transform = `scaleX(${k})`
-        rulesRef.current.style.opacity = String(k)
-      }
-      if (sheenRef.current) {
-        const sp = ((t - LOGO_T - 1.6) / 2.2) % 3.2
-        sheenRef.current.style.backgroundPosition = `${200 - sp * 140}% 0`
-      }
+    // Знак вырастает из центра вспышки и занимает место над подписью.
+    const brand = brandReveal(t, FLASH_T)
+    if (logoWrap.current) logoWrap.current.style.opacity = brand.visible ? '1' : '0'
+    if (logoBackdropRef.current) logoBackdropRef.current.style.opacity = String(brand.backdrop)
+    if (markRef.current && logoWrap.current) {
+      const centreOffset = logoWrap.current.clientHeight / 2 - (markRef.current.offsetTop + markRef.current.offsetHeight / 2)
+      markRef.current.style.opacity = String(brand.markOpacity)
+      markRef.current.style.transform = `translateY(${centreOffset * brand.centreOffset}px) scale(${brand.markScale})`
+      markRef.current.style.filter = `blur(${brand.blur}px) drop-shadow(0 0 ${brand.glow}px rgba(215,181,109,.6))`
     }
-    const mp = clamp01((t - LOGO_T) / 1.6)
-    if (Math.abs(mp - markPRef.current) > 0.01 || (mp === 0) !== (markPRef.current === 0)) {
-      markPRef.current = mp
-      setMarkP(mp)
+    if (tagRef.current) {
+      tagRef.current.style.opacity = String(brand.text)
+      tagRef.current.style.transform = `translateY(${(1 - brand.text) * 14}px)`
+      tagRef.current.style.filter = `blur(${(1 - brand.text) * 5}px)`
     }
   }, [])
 
   useEffect(() => {
     if (!stageRef.current) return
-    const eng = new GoldIntro(stageRef.current)
+    let eng: GoldIntro
+    try {
+      eng = new GoldIntro(stageRef.current)
+    } catch {
+      setError('Не удалось запустить 3D-графику. Проверьте поддержку WebGL в браузере.')
+      return
+    }
     engineRef.current = eng
     ;(window as unknown as { __intro?: GoldIntro }).__intro = eng
     eng.onFrame = onFrame
     eng.onEnd = () => setStatus('ended')
-    const audio = audioRef.current
     return () => {
+      exportRef.current?.abort()
+      if (videoUrlRef.current) URL.revokeObjectURL(videoUrlRef.current)
       eng.dispose()
-      audio.stop()
+      window.clearTimeout(toastTimer.current)
+      if ((window as unknown as { __intro?: GoldIntro }).__intro === eng) delete (window as unknown as { __intro?: GoldIntro }).__intro
       engineRef.current = null
     }
   }, [onFrame])
 
   const play = () => {
     const eng = engineRef.current
-    if (!eng) return
-    audioRef.current.start(0)
+    if (!eng || exportRef.current) return
     eng.start()
     setStatus('playing')
   }
 
-  const toggleMute = () => {
-    const m = !muted
-    setMuted(m)
-    audioRef.current.setMuted(m)
+  const togglePlayback = () => {
+    const eng = engineRef.current
+    if (!eng || exportRef.current) return
+    if (eng.playing) {
+      eng.pause()
+      setStatus('paused')
+    } else {
+      eng.resume()
+      setStatus('playing')
+    }
   }
 
-  const addFiles = useCallback((files: File[]) => {
+  const seekTimeline = (time: number) => {
     const eng = engineRef.current
-    if (!eng || !files.length) return
-    eng.assignFiles(files)
-    const n = eng.userMediaCount
-    setUserCount(n)
-    setToast(`Загружено в слоты: ${n} из 10`)
-    window.setTimeout(() => setToast(''), 2600)
+    if (!eng || exportRef.current) return
+    eng.seek(time)
+    setStatus('paused')
+  }
+
+  const addFiles = useCallback(async (files: File[]) => {
+    const eng = engineRef.current
+    if (!eng || !files.length || loadingRef.current || exportRef.current || videoUrlRef.current) return
+    loadingRef.current = true
+    setLoading(true)
+    const result = await eng.assignFiles(files)
+    if (engineRef.current !== eng) { loadingRef.current = false; return }
+    setUserCount(eng.userMediaCount)
+    const message = [`Добавлено: ${result.loaded}`, result.failed ? `ошибок: ${result.failed}` : '', result.skipped ? `нет свободных слотов: ${result.skipped}` : ''].filter(Boolean).join(' · ')
+    setToast(message)
+    window.clearTimeout(toastTimer.current)
+    toastTimer.current = window.setTimeout(() => setToast(''), 4000)
+    loadingRef.current = false
+    setLoading(false)
   }, [])
+
+  const clearFiles = () => {
+    if (loadingRef.current || exportRef.current) return
+    engineRef.current?.clearFiles()
+    setUserCount(0)
+    setToast('Слоты очищены')
+    window.clearTimeout(toastTimer.current)
+    toastTimer.current = window.setTimeout(() => setToast(''), 2600)
+  }
+
+  const exportVideo = async () => {
+    const eng = engineRef.current
+    if (!eng || loadingRef.current || exportRef.current) return
+    const controller = new AbortController()
+    exportRef.current = controller
+    setError('')
+    setExportProgress('Подготовка экспорта…')
+    try {
+      const blob = await exportIntro(eng, controller.signal, setExportProgress)
+      if (controller.signal.aborted) return
+      const url = URL.createObjectURL(blob)
+      if (videoUrlRef.current) URL.revokeObjectURL(videoUrlRef.current)
+      videoUrlRef.current = url
+      eng.setVideoPreview(true)
+      setVideoError(false)
+      setVideoUrl(url)
+    } catch (e) {
+      if (!(e instanceof DOMException && e.name === 'AbortError')) setError(e instanceof Error ? e.message : 'Не удалось экспортировать видео.')
+    } finally {
+      if (exportRef.current === controller) { exportRef.current = null; setExportProgress('') }
+    }
+  }
+
+  const closeVideo = () => {
+    engineRef.current?.setVideoPreview(false)
+    setVideoUrl('')
+    if (videoUrlRef.current) URL.revokeObjectURL(videoUrlRef.current)
+    videoUrlRef.current = ''
+  }
 
   useEffect(() => {
     const over = (e: DragEvent) => {
@@ -227,42 +247,31 @@ export default function App() {
 
       {/* HUD */}
       <div ref={hudRef} className="pointer-events-none absolute inset-0 opacity-0">
-        <div className="absolute top-6 left-6 flex items-center gap-3 text-[10px] tracking-[0.4em] uppercase text-[#e8c27a]/80 md:top-8 md:left-10">
-          <span className="inline-block h-1.5 w-1.5 rotate-45 bg-[#e8c27a]" />
+        <div className="absolute top-6 left-6 flex items-center gap-3 text-[10px] tracking-[0.35em] uppercase text-[#e9d8b6]/80 md:top-8 md:left-10">
+          <img src={logoUrl} alt="" className="h-6 w-6 object-contain" />
           {BRAND.name}
         </div>
-        <div className="absolute top-6 right-6 text-[10px] tracking-[0.4em] uppercase text-[#e8c27a]/60 md:top-8 md:right-10">
-          Golden Intro · 2026
+        <div className="absolute top-6 left-1/2 hidden -translate-x-1/2 text-[10px] tracking-[0.4em] uppercase text-[#e8c27a]/60 md:top-8 md:block">
+          A CINEMATIC EXPERIENCE
         </div>
 
         <div ref={capRef} className="absolute bottom-24 left-6 md:bottom-28 md:left-10" style={{ opacity: 0 }}>
           <div className="flex items-end gap-4">
-            <div className="gold-text text-6xl leading-none md:text-8xl" style={{ fontFamily: '"Cormorant Garamond", serif', fontWeight: 600 }}>
+            <div className="gold-text text-5xl leading-none md:text-7xl" style={{ fontFamily: '"Cormorant Garamond", serif', fontWeight: 600 }}>
               {String(clip + 1).padStart(2, '0')}
             </div>
             <div className="pb-1 md:pb-3">
               <div className="text-[10px] tracking-[0.45em] text-[#e8c27a]/70 uppercase">
-                {cur ? (cur.kind === 'video' ? 'Видео' : 'Фото') : ''} · {clip + 1} / 10
+                {cur ? ((engineRef.current?.mediaKind(clip) ?? cur.kind) === 'video' ? 'Видео' : 'Фото') : ''} · {clip + 1} / 10
               </div>
-              <div className="mt-1 text-xl tracking-[0.2em] text-[#fff1cc] uppercase md:text-2xl" style={{ fontFamily: 'Cinzel, serif' }}>
+              <div className="mt-1 text-2xl tracking-[0.02em] text-[#fff1cc] md:text-4xl" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
                 {cur?.title}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="absolute bottom-10 left-1/2 flex -translate-x-1/2 items-end gap-2 md:bottom-12">
-          {MEDIA.map((_, i) => (
-            <div
-              key={i}
-              ref={(el) => {
-                tickRefs.current[i] = el
-              }}
-              className="h-3 w-[3px] origin-bottom bg-[#e8c27a] transition-transform duration-300"
-              style={{ opacity: 0.22 }}
-            />
-          ))}
-        </div>
+
       </div>
 
       {/* прогресс */}
@@ -270,95 +279,102 @@ export default function App() {
         <div ref={barRef} className="h-full origin-left bg-gradient-to-r from-[#8a6126] via-[#f3d58f] to-[#fff6dc]" style={{ transform: 'scaleX(0)' }} />
       </div>
 
-      {/* логотип */}
+      {/* Фирменный знак и подпись */}
       <div ref={logoWrap} className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center opacity-0">
-        <div ref={markRef} className="mb-5 h-16 w-16 md:mb-7 md:h-24 md:w-24" style={{ filter: 'drop-shadow(0 0 18px rgba(255,200,100,.55))' }}>
-          <StarMark progress={markP} />
+        <div ref={logoBackdropRef} className="brand-backdrop absolute inset-0 opacity-0" />
+        <div ref={markRef} className="relative mb-6 h-32 w-32 opacity-0 md:mb-9 md:h-48 md:w-48">
+          <img src={logoUrl} alt="" className="h-full w-full object-contain" />
         </div>
-        <div className="relative">
-          <div className="flex" style={{ fontFamily: 'Cinzel, serif', fontWeight: 600 }}>
-            {BRAND.name.split('').map((ch, i) => (
-              <span
-                key={i}
-                ref={(el) => {
-                  letters.current[i] = el
-                }}
-                className="gold-letter inline-block text-[clamp(52px,11vw,170px)] leading-none"
-                style={{ opacity: 0, margin: '0 0.04em' }}
-              >
-                {ch}
-              </span>
-            ))}
-          </div>
-          <div
-            ref={sheenRef}
-            className="sheen absolute inset-0"
-            style={{ fontFamily: 'Cinzel, serif', fontWeight: 600 }}
-          >
-            <div className="flex">
-              {BRAND.name.split('').map((ch, i) => (
-                <span key={i} className="inline-block text-[clamp(52px,11vw,170px)] leading-none" style={{ margin: '0 0.04em' }}>
-                  {ch}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div ref={rulesRef} className="my-4 h-px w-[min(520px,70vw)] origin-center bg-gradient-to-r from-transparent via-[#f0cf88] to-transparent md:my-6" style={{ opacity: 0 }} />
-        <div ref={tagRef} className="text-[11px] tracking-[0.5em] text-[#f1d596] uppercase md:text-sm" style={{ opacity: 0 }}>
-          {BRAND.tagline}
+        <div ref={tagRef} className="gold-text relative max-w-[90vw] px-3 text-center text-[clamp(25px,4.6vw,64px)] leading-tight tracking-[0.08em] opacity-0" style={{ fontFamily: '"Cormorant Garamond", Georgia, serif', fontWeight: 600 }}>
+          {BRAND.name}
         </div>
       </div>
 
-      {/* стартовый экран */}
+      {/* Стартовый экран */}
       {status === 'idle' && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/55 backdrop-blur-[3px]">
-          <div className="mb-8 h-16 w-16 opacity-90">
-            <StarMark progress={1} />
+        <div className="intro-cover absolute inset-0 z-20 flex flex-col items-center justify-center overflow-y-auto px-6 py-12 text-center">
+          <div className="cover-frame pointer-events-none absolute inset-4 md:inset-7" />
+          <div className="cover-top pointer-events-none absolute left-8 right-8 top-8 flex items-center justify-between md:left-12 md:right-12 md:top-11">
+            <span>{BRAND.name} <span className="cover-top-muted"> / CREATIVE STUDIO</span></span>
+            <span className="cover-top-muted">EST. 2026</span>
           </div>
-          <div className="text-[11px] tracking-[0.6em] text-[#e8c27a]/80 uppercase">{BRAND.name} · Golden Intro</div>
-          <h1 className="gold-text mt-5 px-6 text-center text-4xl leading-tight md:text-6xl" style={{ fontFamily: '"Cormorant Garamond", serif', fontWeight: 600 }}>
-            10 кадров. Одна звезда.
-          </h1>
-          <p className="mt-4 max-w-md px-6 text-center text-sm leading-relaxed text-[#e8d4a6]/70">
-            Золотые полигоны, стеклянные панели и взрыв звезды. Включите звук для полного эффекта.
-          </p>
-          <button
-            onClick={play}
-            className="group relative mt-10 overflow-hidden border border-[#e8c27a]/70 px-10 py-4 text-xs tracking-[0.5em] text-[#fff1cc] uppercase transition hover:border-[#fff1cc]"
-          >
-            <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-[#e8c27a]/30 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-            <span className="relative">Запустить интро</span>
-          </button>
-          <button onClick={() => fileRef.current?.click()} className="mt-6 text-[11px] tracking-[0.3em] text-[#e8c27a]/60 uppercase underline-offset-4 hover:text-[#fff1cc] hover:underline">
-            Загрузить своё фото / видео {userCount > 0 ? `· ${userCount}/10` : ''}
-          </button>
-          <div className="mt-3 text-[11px] text-[#e8d4a6]/40">или перетащите файлы на окно — они займут 10 слотов по порядку</div>
+          <div className="relative flex w-full max-w-3xl flex-col items-center pt-10">
+            <div className="mb-7 h-14 w-14 opacity-90 md:mb-9 md:h-20 md:w-20"><img src={logoUrl} alt="Логотип Янтарный циркуль" className="h-full w-full object-contain" /></div>
+            <div className="cover-eyebrow">A CINEMATIC EXPERIENCE <span>✦</span> BY {BRAND.name}</div>
+            <h1 className="cover-heading mt-5 md:mt-7">История, достойная<br /><em>золотого света.</em></h1>
+            <div className="cover-divider mt-7 md:mt-9"><span /></div>
+            <p className="cover-description mt-6">Десять моментов. Одно впечатление.<br />Создайте интро, которое останется в памяти.</p>
+            <button onClick={play} className="cover-button group mt-8 md:mt-10">
+              <span className="cover-play">▶</span><span>Смотреть интро</span><span className="cover-arrow">↗</span>
+            </button>
+            <button disabled={loading} onClick={() => fileRef.current?.click()} className="cover-upload mt-6">
+              {loading ? 'Загрузка медиа…' : 'Добавить свои фото и видео'} {userCount > 0 ? `· ${userCount}/10` : ''}
+            </button>
+            <div className="cover-hint mt-2">или просто перетащите файлы в окно</div>
+            <button disabled={loading} onClick={exportVideo} className="cover-export mt-5">↓ &nbsp; Экспортировать MP4 <span>1080p · 60 fps</span></button>
+            {userCount > 0 && <button disabled={loading} onClick={clearFiles} className="mt-3 text-xs text-[#e8c27a]/70 underline">Очистить слоты</button>}
+          </div>
+          <div className="cover-bottom pointer-events-none absolute bottom-9 left-10 right-10 hidden items-center justify-between md:flex">
+            <span>THE ART OF FIRST IMPRESSIONS</span><span>01 — 10</span><span>A STUDY IN LIGHT AND MOTION</span>
+          </div>
         </div>
+      )}
+
+      {(status === 'playing' || status === 'paused') && (
+        <button disabled={loading} onClick={exportVideo} className="absolute top-6 right-6 z-30 border border-[#d8c5a3]/35 bg-black/40 px-4 py-2 text-[10px] tracking-[0.15em] uppercase text-[#e8d4a6] backdrop-blur hover:border-[#d8c5a3] md:top-8 md:right-10">
+          Экспорт MP4
+        </button>
       )}
 
       {/* конец */}
       {status === 'ended' && (
-        <div className="absolute right-0 bottom-8 left-0 z-20 flex flex-col items-center gap-3">
+        <div className="absolute right-0 bottom-28 left-0 z-20 flex flex-col items-center gap-3">
           <div className="flex items-center gap-6">
             <button onClick={play} className="border border-[#e8c27a]/60 bg-black/30 px-7 py-3 text-[11px] tracking-[0.45em] text-[#fff1cc] uppercase backdrop-blur transition hover:border-[#fff1cc] hover:bg-[#e8c27a]/10">
               Повторить
             </button>
-            <button onClick={() => fileRef.current?.click()} className="text-[11px] tracking-[0.3em] text-[#e8c27a]/70 uppercase underline-offset-4 hover:text-[#fff1cc] hover:underline">
+            <button disabled={loading} onClick={() => fileRef.current?.click()} className="text-[11px] tracking-[0.3em] text-[#e8c27a]/70 uppercase underline-offset-4 hover:text-[#fff1cc] hover:underline">
               Загрузить медиа {userCount > 0 ? `· ${userCount}/10` : ''}
             </button>
+          </div>
+          <button disabled={loading} onClick={exportVideo} className="cover-export">↓ &nbsp; Экспортировать MP4 <span>1080p · 60 fps</span></button>
+          {userCount > 0 && <button disabled={loading} onClick={clearFiles} className="text-xs text-[#e8c27a]/70 underline">Очистить слоты</button>}
+        </div>
+      )}
+
+      {status !== 'idle' && (
+        <div className="timeline-controls absolute bottom-4 left-1/2 z-30 w-[min(94vw,760px)] -translate-x-1/2 px-4 py-3 md:bottom-6 md:px-6" aria-label="Управление таймлайном">
+          <div className="flex items-center gap-3 md:gap-5">
+            <button onClick={togglePlayback} className="timeline-play" aria-label={status === 'playing' ? 'Пауза' : 'Воспроизвести'} title={status === 'playing' ? 'Пауза' : 'Воспроизвести'}>{status === 'playing' ? 'Ⅱ' : '▶'}</button>
+            <span ref={timelineTimeRef} className="timeline-time">00:00</span>
+            <div className="min-w-0 flex-1">
+              <input ref={timelineRef} className="timeline-range" type="range" min="0" max={END_T} step={1 / 60} defaultValue="0" aria-label="Позиция анимации" onChange={(event) => seekTimeline(Number(event.currentTarget.value))} />
+              <div className="timeline-markers" aria-label="Переход к кадру">
+                {MEDIA.map((item, i) => <button key={`${item.title}-${i}`} style={{ left: `${(clipCenter(i) / END_T) * 100}%` }} onClick={() => seekTimeline(clipCenter(i))} aria-label={`Кадр ${i + 1}: ${item.title}`} title={`${String(i + 1).padStart(2, '0')} · ${item.title}`}><span /></button>)}
+              </div>
+            </div>
+            <span className="timeline-time">{formatTime(END_T)}</span>
+            <button onClick={play} className="timeline-restart" aria-label="С начала" title="С начала">↺</button>
           </div>
         </div>
       )}
 
-      {/* звук */}
-      <button
-        onClick={toggleMute}
-        className="absolute top-5 right-1/2 z-30 translate-x-1/2 text-[10px] tracking-[0.35em] text-[#e8c27a]/60 uppercase hover:text-[#fff1cc] md:top-7"
-        style={{ display: status === 'idle' ? 'none' : 'block' }}
-      >
-        {muted ? 'Звук выкл' : 'Звук вкл'}
-      </button>
+      {exportProgress && <div role="status" className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-5 bg-black/90 px-6 text-center">
+        <div className="text-xs tracking-[0.3em] uppercase text-[#d8c5a3]">Создаём ваше видео</div>
+        <p className="text-sm text-[#e8d4a6]/75">{exportProgress}</p>
+        <p className="max-w-sm text-xs leading-relaxed text-[#e8d4a6]/45">Кадры рассчитываются последовательно. Не закрывайте вкладку — экспорт может занять несколько минут.</p>
+        <button onClick={() => exportRef.current?.abort()} className="border border-[#d8c5a3]/50 px-6 py-3 text-xs text-[#e8d4a6]">Отменить</button>
+      </div>}
+
+      {videoUrl && <div role="dialog" aria-modal="true" aria-label="Готовое видео" className="absolute inset-0 z-[70] flex flex-col items-center justify-center gap-4 bg-[#080807] px-4 py-6 md:px-10">
+        <div className="flex w-full max-w-6xl items-center justify-between gap-4 text-[#e8d4a6]">
+          <div><div className="text-xs tracking-[0.25em] uppercase">Ваше видео готово</div><div className="mt-1 text-[11px] text-[#e8d4a6]/50">Full HD · 60 кадров/с · без звука</div></div>
+          <button onClick={closeVideo} className="border border-[#d8c5a3]/40 px-4 py-2 text-xs hover:border-[#d8c5a3]">Закрыть</button>
+        </div>
+        <video src={videoUrl} controls playsInline muted autoPlay className="min-h-0 w-full max-w-6xl flex-1 object-contain" onError={() => setVideoError(true)} />
+        {videoError && <p role="alert" className="text-sm text-[#e8d4a6]">Не удалось воспроизвести MP4 в браузере. Попробуйте скачать файл.</p>}
+        <a href={videoUrl} download="yantarny-tsirkul-intro-1080p-60fps.mp4" className="border border-[#d8c5a3]/60 px-7 py-3 text-xs tracking-[0.2em] uppercase text-[#e8d4a6] hover:bg-[#e8d4a6]/10">Скачать MP4</a>
+      </div>}
 
       <input
         ref={fileRef}
@@ -371,6 +387,8 @@ export default function App() {
           e.target.value = ''
         }}
       />
+
+      {error && <div role="alert" className="absolute top-12 left-1/2 z-50 w-[min(90%,36rem)] -translate-x-1/2 border border-[#e8c27a]/50 bg-black/90 p-4 text-center text-sm">{error}</div>}
 
       {/* drag overlay */}
       {dragging && (
