@@ -18,18 +18,12 @@ export const BRAND = {
   presents: 'представляет',
 }
 
-export const MEDIA: MediaSlotConfig[] = [
-  { kind: 'video', title: 'Рассвет' },
-  { kind: 'photo', title: 'Энергия' },
-  { kind: 'video', title: 'Люди' },
-  { kind: 'photo', title: 'Мощь' },
-  { kind: 'video', title: 'Движение' },
-  { kind: 'photo', title: 'Город' },
-  { kind: 'video', title: 'Технологии' },
-  { kind: 'photo', title: 'Свет' },
-  { kind: 'video', title: 'Будущее' },
-  { kind: 'photo', title: 'Единство' },
-]
+// Source files are the ten clips from arena.ai/circle/video, in filename order.
+export const MEDIA: MediaSlotConfig[] = Array.from({ length: 10 }, (_, i) => ({
+  kind: 'video',
+  title: `Кадр ${i + 1}`,
+  src: `${import.meta.env?.BASE_URL ?? '/'}videos/${String(i + 1).padStart(2, '0')}.mp4`,
+}))
 
 // ── Таймлайн (секунды) ──
 export const CLIP_T0 = 4.6 // центр первого клипа

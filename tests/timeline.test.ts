@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import { strict as assert } from 'node:assert'
-import { brandBackdropOpacity, brandReveal, clipMediaTime, continuousCameraTime, finaleDim, frameTiming, lightOrbit, lightPanelIndex, lightVisibility } from '../src/intro/timeline.ts'
+import { brandBackdropOpacity, brandReveal, clipMediaTime, continuousCameraTime, finaleDim, frameTiming, lightOrbit, lightPanelIndex, lightVisibility, panelMote } from '../src/intro/timeline.ts'
 import { CLIP_DT, CLIP_T0, END_T, FLASH_T, MEDIA, PANEL_BEFORE, PANEL_AFTER, clipCenter } from '../src/intro/config.ts'
 
 test('60 fps timestamps are contiguous through the complete export', () => {
@@ -98,4 +98,17 @@ test('brand emerges from the explosion before the text and settles in place', ()
   assert.equal(final.centreOffset, 0)
   assert.equal(final.text, 1)
   assert.equal(final.backdrop, 1)
+})
+
+
+test('panel particles move while remaining outside the image', () => {
+  const w = 11.6, h = 6.525
+  for (let i = 0; i < 112; i++) {
+    for (let t = 0; t < 8; t += 0.25) {
+      const p = panelMote(t, i, w, h)
+      assert.ok(Math.abs(p.x) > w / 2 || Math.abs(p.y) > h / 2)
+    }
+    const a = panelMote(0, i, w, h), b = panelMote(2, i, w, h)
+    assert.ok(a.x !== b.x || a.y !== b.y || a.z !== b.z)
+  }
 })

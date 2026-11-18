@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { BRAND, type MediaSlotConfig } from './config'
+import type { MediaSlotConfig } from './config'
 
 const W = 960
 const H = 540
@@ -9,7 +9,6 @@ function paintPlaceholder(
   ctx: CanvasRenderingContext2D,
   t: number,
   i: number,
-  kind: 'video' | 'photo',
 ) {
   const background = ctx.createLinearGradient(0, 0, W, H)
   background.addColorStop(0, '#25201a')
@@ -46,24 +45,7 @@ function paintPlaceholder(
   }
   ctx.restore()
 
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'alphabetic'
-  ctx.fillStyle = 'rgba(225, 207, 171, 0.65)'
-  ctx.font = '500 15px Manrope, Arial, sans-serif'
-  ctx.fillText(`${BRAND.name}  /  ВИЗУАЛЬНАЯ ИСТОРИЯ`, 62, 78)
-  ctx.fillStyle = 'rgba(226, 205, 168, 0.7)'
-  ctx.font = '400 58px "Cormorant Garamond", Georgia, serif'
-  ctx.fillText('Your story,', 64, 245)
-  ctx.font = 'italic 58px "Cormorant Garamond", Georgia, serif'
-  ctx.fillText('in a new light.', 64, 310)
-  ctx.fillStyle = 'rgba(225, 207, 171, 0.38)'
-  ctx.font = '500 14px Manrope, Arial, sans-serif'
-  ctx.fillText(`${BRAND.name}  /  ${String(i + 1).padStart(2, '0')}`, 64, 350)
-  ctx.fillStyle = 'rgba(225, 207, 171, 0.52)'
-  ctx.font = '500 14px Manrope, Arial, sans-serif'
-  ctx.fillText(kind === 'video' ? 'M O T I O N   /   0 1 — 1 0' : 'S T I L L   /   0 1 — 1 0', 64, H - 64)
-  ctx.textAlign = 'right'
-  ctx.fillText('Y O U R   S T O R Y   H E R E', W - 64, H - 64)
+
 }
 
 export class MediaSlot {
@@ -81,6 +63,8 @@ export class MediaSlot {
   private objectUrl?: string
   private generation = 0
   private disposed = false
+  private playPending = false
+  private playbackBlocked = false
   kind: 'video' | 'photo'
 
   constructor(cfg: MediaSlotConfig, index: number, panelAspect: number) {
@@ -96,9 +80,8 @@ export class MediaSlot {
     tex.colorSpace = THREE.SRGBColorSpace
     tex.anisotropy = 4
     this.texture = tex
-    paintPlaceholder(this.ctx, 0, index, cfg.kind)
+    paintPlaceholder(this.ctx, 0, index)
     tex.needsUpdate = true
-    if (cfg.src) void this.load(cfg.src, cfg.kind)
   }
 
   private cover(aspect: number) {
@@ -125,8 +108,9 @@ export class MediaSlot {
         video.crossOrigin = 'anonymous'
         const v = video
         await new Promise<void>((resolve, reject) => {
-          v.onloadedmetadata = () => resolve()
-          v.onerror = () => reject(new Error('Video load failed'))
+          const timer = window.setTimeout(() => reject(new Error('Video load timed out')), 30000)
+          v.onloadedmetadata = () => { window.clearTimeout(timer); resolve() }
+          v.onerror = () => { window.clearTimeout(timer); reject(new Error('Video load failed')) }
           v.src = src
           v.load()
         })
@@ -174,6 +158,8 @@ export class MediaSlot {
     this.texture.dispose()
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl)
     this.objectUrl = undefined
+    this.playPending = false
+    this.playbackBlocked = false
   }
 
   clear() {
@@ -183,7 +169,7 @@ export class MediaSlot {
     this.userMedia = false
     this.crop.set(1, 1, 0, 0)
     this.lastPaint = -1
-    paintPlaceholder(this.ctx, 0, this.index, this.cfg.kind)
+    paintPlaceholder(this.ctx, 0, this.index)
     const texture = new THREE.CanvasTexture(this.canvas)
     texture.colorSpace = THREE.SRGBColorSpace
     texture.anisotropy = 4
@@ -200,11 +186,27 @@ export class MediaSlot {
 
   onTexture?: (t: THREE.Texture) => void
 
-  setActive(on: boolean) {
+  setActive(on: boolean, target = 0, onError?: () => void) {
     const v = this.video
     if (!v) return
-    if (on && v.paused) v.play().catch(() => {})
-    if (!on && !v.paused) v.pause()
+    if (!on) {
+      if (!v.paused) v.pause()
+      return
+    }
+    if (Number.isFinite(v.duration) && v.duration > 0 && !v.seeking) {
+      const difference = Math.abs(v.currentTime - target)
+      const loopDifference = Math.min(difference, Math.abs(v.duration - difference))
+      if (loopDifference > 0.45) v.currentTime = target
+    }
+    if (v.paused && !this.playPending && !this.playbackBlocked) {
+      this.playPending = true
+      v.play().catch((error: unknown) => {
+        if (this.video === v && error instanceof DOMException && error.name !== 'AbortError') {
+          this.playbackBlocked = true
+          onError?.()
+        }
+      }).finally(() => { if (this.video === v) this.playPending = false })
+    }
   }
 
   update(time: number, active: boolean) {
@@ -214,7 +216,7 @@ export class MediaSlot {
     const q = Math.floor(time * 60 + 1e-6)
     if (q === this.lastPaint) return
     this.lastPaint = q
-    paintPlaceholder(this.ctx, time + this.index * 3.7, this.index, this.cfg.kind)
+    paintPlaceholder(this.ctx, time + this.index * 3.7, this.index)
     this.texture.needsUpdate = true
   }
 }

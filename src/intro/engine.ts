@@ -10,7 +10,7 @@ import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeome
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
 import { MEDIA, FLASH_T, END_T, CLIP_T0, CLIP_DT, PANEL_BEFORE, PANEL_AFTER, clipCenter } from './config'
 import { MediaSlot } from './media'
-import { clipMediaTime, continuousCameraTime, finaleDim, lightOrbit, lightPanelIndex, lightVisibility } from './timeline'
+import { clipMediaTime, continuousCameraTime, finaleDim, lightOrbit, lightPanelIndex, lightVisibility, panelMote } from './timeline'
 import { Finale } from './finale'
 import { dotTexture, glowTexture, starTexture } from './textures'
 
@@ -30,8 +30,8 @@ const S = (t: number) => V * gT(t)
 const cameraTime = (t: number) => continuousCameraTime(t, CLIP_T0, clipCenter(MEDIA.length - 1), CLIP_DT, FLASH_T)
 
 const FLOOR_Y = -4
-const PANEL_W = 10.4
-const PANEL_H = 5.85
+const PANEL_W = 11.6
+const PANEL_H = 6.525
 const PANEL_DIST = 11.5
 const FIN_Y = 1000
 
@@ -49,6 +49,7 @@ interface Panel {
   flare: THREE.Sprite
   frameMat: THREE.MeshStandardMaterial
   edgeMat: LineMaterial
+  motes: THREE.Points
 }
 
 export class GoldIntro {
@@ -91,6 +92,7 @@ export class GoldIntro {
   playing = false
   onFrame?: (t: number) => void
   onEnd?: () => void
+  onVideoError?: (message: string) => void
   private disposed = false
   private exporting = false
   private previewingVideo = false
@@ -610,8 +612,15 @@ export class GoldIntro {
       flare.position.set(side * hw * 0.55, -hh * 0.9, 0.35)
       flare.scale.set(6, 6, 1)
 
+      const moteGeometry = new THREE.BufferGeometry()
+      moteGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(112 * 3), 3))
+      const motes = new THREE.Points(moteGeometry, new THREE.PointsMaterial({
+        map: dotTexture(), color: 0xffd18a, size: 0.095, transparent: true,
+        opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+      }))
+      motes.frustumCulled = false
       const fly = new THREE.Group()
-      fly.add(frame, media, edgeLine, flare)
+      fly.add(frame, media, edgeLine, flare, motes)
       const root = new THREE.Group()
       root.add(fly)
       root.visible = false
@@ -628,11 +637,18 @@ export class GoldIntro {
       root.rotateY(side * 0.16)
       root.rotateZ(roll)
       this.corridor.add(root)
-      this.panels.push({ root, fly, mat, slot, side, roll, tc, pos, flare, frameMat: pFrameMat, edgeMat: lmat })
+      this.panels.push({ root, fly, mat, slot, side, roll, tc, pos, flare, frameMat: pFrameMat, edgeMat: lmat, motes })
     }
   }
 
   // ───────────────────────── API ─────────────────────────
+
+  async loadDefaultMedia() {
+    const results = await Promise.all(this.slots.map((slot) =>
+      slot.cfg.src ? slot.load(slot.cfg.src, slot.cfg.kind) : Promise.resolve(false),
+    ))
+    return results.filter(Boolean).length
+  }
 
   async assignFiles(files: File[]) {
     let loaded = 0
@@ -968,7 +984,11 @@ export class GoldIntro {
       const p = this.panels[i]
       const visible = t > p.tc - PANEL_BEFORE && t < p.tc + PANEL_AFTER
       p.root.visible = visible
-      if (!this.exporting) p.slot.setActive(visible && this.playing)
+      if (!this.exporting) {
+        const video = p.slot.video
+        const target = video ? clipMediaTime(t, p.tc, PANEL_BEFORE, video.duration) : 0
+        p.slot.setActive(visible && this.playing, target, () => this.onVideoError?.('Браузер не смог воспроизвести видео. Проверьте поддержку H.264 и попробуйте Chrome или Edge.'))
+      }
       p.slot.update(t, visible)
       if (!visible) continue
       const pTime = clamp01((t - (p.tc - PANEL_BEFORE)) / (PANEL_BEFORE + PANEL_AFTER))
@@ -986,6 +1006,13 @@ export class GoldIntro {
       u.uAlpha.value = al
       p.frameMat.opacity = al
       p.edgeMat.opacity = al
+      const motePositions = p.motes.geometry.getAttribute('position') as THREE.BufferAttribute
+      for (let j = 0; j < motePositions.count; j++) {
+        const mote = panelMote(t + i * 2, j, PANEL_W, PANEL_H)
+        motePositions.setXYZ(j, mote.x, mote.y, mote.z)
+      }
+      motePositions.needsUpdate = true
+      ;(p.motes.material as THREE.PointsMaterial).opacity = al * 0.8
       ;(p.flare.material as THREE.SpriteMaterial).opacity = 0
       lightW = Math.max(lightW, al)
       lightPos.copy(p.pos)

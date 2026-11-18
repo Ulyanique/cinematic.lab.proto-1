@@ -22,7 +22,6 @@ export default function App() {
   const fileRef = useRef<HTMLInputElement>(null)
 
   const titleRef = useRef<HTMLDivElement>(null)
-  const capRef = useRef<HTMLDivElement>(null)
   const barRef = useRef<HTMLDivElement>(null)
   const logoWrap = useRef<HTMLDivElement>(null)
   const markRef = useRef<HTMLDivElement>(null)
@@ -33,7 +32,6 @@ export default function App() {
   const timelineTimeRef = useRef<HTMLSpanElement>(null)
 
   const [status, setStatus] = useState<Status>('idle')
-  const [clip, setClip] = useState(-1)
   const [dragging, setDragging] = useState(false)
   const [toast, setToast] = useState('')
   const [userCount, setUserCount] = useState(0)
@@ -46,7 +44,6 @@ export default function App() {
   const exportRef = useRef<AbortController | null>(null)
   const loadingRef = useRef(false)
   const toastTimer = useRef<number | undefined>(undefined)
-  const clipRef = useRef(-1)
 
   const onFrame = useCallback((t: number) => {
     // вступительная надпись
@@ -55,25 +52,6 @@ export default function App() {
       titleRef.current.style.opacity = String(a)
       titleRef.current.style.transform = `translateY(${(1 - smooth(0.9, 1.9, t)) * 14}px) scale(${1 + (t - 1) * 0.012})`
       titleRef.current.style.filter = `blur(${(1 - a) * 6}px)`
-    }
-
-    // подписи клипов
-    let idx = -1
-    let cw = 0
-    for (let i = 0; i < MEDIA.length; i++) {
-      const tc = clipCenter(i)
-      if (t > tc - 1.85 && t < tc + 1.85) {
-        idx = i
-        cw = smooth(tc - 1.85, tc - 1.25, t) * (1 - smooth(tc + 1.2, tc + 1.85, t))
-      }
-    }
-    if (idx !== clipRef.current) {
-      clipRef.current = idx
-      setClip(idx)
-    }
-    if (capRef.current) {
-      capRef.current.style.opacity = String(cw)
-      capRef.current.style.transform = `translateX(${(1 - cw) * -24}px)`
     }
 
     // прогресс
@@ -116,6 +94,16 @@ export default function App() {
     ;(window as unknown as { __intro?: GoldIntro }).__intro = eng
     eng.onFrame = onFrame
     eng.onEnd = () => setStatus('ended')
+    eng.onVideoError = (message) => setError(message)
+    loadingRef.current = true
+    setLoading(true)
+    void eng.loadDefaultMedia().then((count) => {
+      if (engineRef.current !== eng) return
+      setUserCount(count)
+      loadingRef.current = false
+      setLoading(false)
+      if (count !== MEDIA.length) setError(`Не удалось загрузить видео: ${MEDIA.length - count} из ${MEDIA.length}. Проверьте доступность файлов или загрузите их вручную.`)
+    })
     return () => {
       exportRef.current?.abort()
       if (videoUrlRef.current) URL.revokeObjectURL(videoUrlRef.current)
@@ -128,7 +116,7 @@ export default function App() {
 
   const play = () => {
     const eng = engineRef.current
-    if (!eng || exportRef.current) return
+    if (!eng || loadingRef.current || exportRef.current) return
     eng.start()
     setStatus('playing')
   }
@@ -230,8 +218,6 @@ export default function App() {
     }
   }, [addFiles])
 
-  const cur = clip >= 0 ? MEDIA[clip] : null
-
   return (
     <div className="fixed inset-0 overflow-hidden bg-black text-[#f4e3b8] select-none" style={{ fontFamily: 'Manrope, system-ui, sans-serif' }}>
       <div ref={stageRef} className="absolute inset-0" />
@@ -255,21 +241,6 @@ export default function App() {
           A CINEMATIC EXPERIENCE
         </div>
 
-        <div ref={capRef} className="absolute bottom-24 left-6 md:bottom-28 md:left-10" style={{ opacity: 0 }}>
-          <div className="flex items-end gap-4">
-            <div className="gold-text text-5xl leading-none md:text-7xl" style={{ fontFamily: '"Cormorant Garamond", serif', fontWeight: 600 }}>
-              {String(clip + 1).padStart(2, '0')}
-            </div>
-            <div className="pb-1 md:pb-3">
-              <div className="text-[10px] tracking-[0.45em] text-[#e8c27a]/70 uppercase">
-                {cur ? ((engineRef.current?.mediaKind(clip) ?? cur.kind) === 'video' ? 'Видео' : 'Фото') : ''} · {clip + 1} / 10
-              </div>
-              <div className="mt-1 text-2xl tracking-[0.02em] text-[#fff1cc] md:text-4xl" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
-                {cur?.title}
-              </div>
-            </div>
-          </div>
-        </div>
 
 
       </div>
@@ -304,7 +275,7 @@ export default function App() {
             <h1 className="cover-heading mt-5 md:mt-7">История, достойная<br /><em>золотого света.</em></h1>
             <div className="cover-divider mt-7 md:mt-9"><span /></div>
             <p className="cover-description mt-6">Десять моментов. Одно впечатление.<br />Создайте интро, которое останется в памяти.</p>
-            <button onClick={play} className="cover-button group mt-8 md:mt-10">
+            <button disabled={loading} onClick={play} className="cover-button group mt-8 md:mt-10">
               <span className="cover-play">▶</span><span>Смотреть интро</span><span className="cover-arrow">↗</span>
             </button>
             <button disabled={loading} onClick={() => fileRef.current?.click()} className="cover-upload mt-6">

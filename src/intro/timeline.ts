@@ -76,3 +76,14 @@ export function brandReveal(t: number, flashTime: number) {
     text: smooth(1.6, 3.4),
   }
 }
+
+/** Gentle motes stay outside the panel, never over its picture. */
+export function panelMote(t: number, index: number, width: number, height: number) {
+  const side = index % 4
+  const phase = index * 2.399963
+  const along = Math.sin(phase + t * (0.13 + (index % 5) * 0.015))
+  const distance = 0.18 + (index % 7) * 0.16 + 0.08 * Math.sin(t * 0.7 + phase)
+  const x = side < 2 ? (side === 0 ? -1 : 1) * (width / 2 + distance) : along * (width / 2 + 0.3)
+  const y = side < 2 ? along * (height / 2 + 0.3) : (side === 2 ? -1 : 1) * (height / 2 + distance)
+  return { x, y, z: -0.1 + 0.18 * Math.sin(phase + t * 0.22) }
+}

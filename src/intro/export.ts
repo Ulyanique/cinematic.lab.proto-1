@@ -2,7 +2,7 @@ import { ArrayBufferTarget, Muxer } from 'mp4-muxer'
 import { GoldIntro } from './engine'
 import { brandReveal, frameTiming } from './timeline'
 import logoUrl from '../assets/logo.svg?inline'
-import { BRAND, END_T, FLASH_T, MEDIA, clipCenter } from './config'
+import { BRAND, END_T, FLASH_T } from './config'
 
 const WIDTH = 1280
 const HEIGHT = 720
@@ -10,47 +10,12 @@ const OUTPUT_WIDTH = 1920
 const OUTPUT_HEIGHT = 1080
 const FPS = 60
 const frames = Math.round(END_T * FPS)
-const clamp = (x: number) => Math.min(1, Math.max(0, x))
-const smooth = (a: number, b: number, x: number) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t) }
 const cancelled = (signal: AbortSignal) => { if (signal.aborted) throw new DOMException('Экспорт отменён', 'AbortError') }
 const yieldUI = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
 // The interface lives in HTML during playback; draw its cinematic elements explicitly into the export.
-function drawOverlay(ctx: CanvasRenderingContext2D, t: number, engine: GoldIntro, logo: HTMLImageElement) {
+function drawOverlay(ctx: CanvasRenderingContext2D, t: number, logo: HTMLImageElement) {
   ctx.save()
-  ctx.textAlign = 'center'
-  ctx.fillStyle = '#e9d3ac'
-  const title = smooth(.9, 1.9, t) * (1 - smooth(3, 4, t))
-  if (title > 0) {
-    ctx.globalAlpha = title
-    ctx.font = '500 13px Manrope, sans-serif'
-    ctx.fillText(BRAND.name.toUpperCase(), WIDTH / 2, 317)
-    ctx.fillRect(WIDTH / 2 - 38, 337, 76, 1)
-    ctx.font = 'italic 48px "Cormorant Garamond", Georgia, serif'
-    ctx.fillText(BRAND.presents, WIDTH / 2, 392)
-  }
-  const hud = smooth(1, 2, t) * (1 - smooth(FLASH_T - .8, FLASH_T - .2, t))
-  if (hud > 0) {
-    ctx.globalAlpha = hud * .8
-    ctx.font = '500 12px Manrope, sans-serif'
-    ctx.textAlign = 'left'
-    ctx.drawImage(logo, 40, 25, 16, 17)
-    ctx.fillText(BRAND.name, 65, 42)
-    ctx.textAlign = 'right'
-    ctx.fillText('A CINEMATIC EXPERIENCE', WIDTH - 40, 42)
-    const i = MEDIA.findIndex((_, n) => t > clipCenter(n) - 1.85 && t < clipCenter(n) + 1.85)
-    if (i >= 0) {
-      const tc = clipCenter(i)
-      ctx.globalAlpha = hud * smooth(tc - 1.85, tc - 1.25, t) * (1 - smooth(tc + 1.2, tc + 1.85, t))
-      ctx.textAlign = 'left'
-      ctx.font = '500 70px "Cormorant Garamond", Georgia, serif'
-      ctx.fillText(String(i + 1).padStart(2, '0'), 40, 635)
-      ctx.font = '500 11px Manrope, sans-serif'
-      ctx.fillText(`${engine.mediaKind(i) === 'video' ? 'ВИДЕО' : 'ФОТО'}  ·  ${i + 1} / 10`, 140, 597)
-      ctx.font = '500 35px "Cormorant Garamond", Georgia, serif'
-      ctx.fillText(MEDIA[i].title, 140, 632)
-    }
-  }
   const brand = brandReveal(t, FLASH_T)
   if (brand.visible) {
     ctx.save()
@@ -137,7 +102,7 @@ export async function exportIntro(engine: GoldIntro, signal: AbortSignal, progre
       ctx.drawImage(scene, 0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT)
       ctx.save()
       ctx.scale(OUTPUT_WIDTH / WIDTH, OUTPUT_HEIGHT / HEIGHT)
-      drawOverlay(ctx, i / FPS, engine, logo)
+      drawOverlay(ctx, i / FPS, logo)
       ctx.restore()
       const frame = new VideoFrame(canvas, frameTiming(i, FPS))
       videoEncoder.encode(frame, { keyFrame: i % (FPS * 2) === 0 }); frame.close()
